@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+
+# Project specific
+# Ignore extracted images (can be regenerated from binaries)
+data/cifar10_images/
+
+# Ignore outputs if not needed (optional, but usually good to ignore training logs)
+outputs/

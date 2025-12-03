@@ -1,0 +1,67 @@
+import os
+import pickle
+import numpy as np
+from PIL import Image
+from tqdm import tqdm
+
+def unpickle(file):
+    with open(file, 'rb') as fo:
+        dict = pickle.load(fo, encoding='bytes')
+    return dict
+
+def save_images(data_batch, output_dir, label_names):
+    images = data_batch[b'data']
+    labels = data_batch[b'labels']
+    filenames = data_batch[b'filenames']
+    
+    images = images.reshape(-1, 3, 32, 32).transpose(0, 2, 3, 1)
+    
+    for i in tqdm(range(len(images))):
+        label = labels[i]
+        label_name = label_names[label].decode('utf-8')
+        image_data = images[i]
+        filename = filenames[i].decode('utf-8')
+        
+        class_dir = os.path.join(output_dir, label_name)
+        os.makedirs(class_dir, exist_ok=True)
+        
+        img = Image.fromarray(image_data)
+        img.save(os.path.join(class_dir, filename))
+
+def main():
+    input_dir = 'data/cifar10'
+    output_dir = 'data/cifar10_images'
+    
+    if not os.path.exists(input_dir):
+        print(f"Input directory {input_dir} not found.")
+        return
+
+    # Load meta
+    meta_file = os.path.join(input_dir, 'batches.meta')
+    if not os.path.exists(meta_file):
+        print("batches.meta not found.")
+        return
+        
+    meta = unpickle(meta_file)
+    label_names = meta[b'label_names']
+    
+    # Process Train
+    train_dir = os.path.join(output_dir, 'train')
+    print("Processing Train batches...")
+    for i in range(1, 6):
+        batch_file = os.path.join(input_dir, f'data_batch_{i}')
+        data = unpickle(batch_file)
+        save_images(data, train_dir, label_names)
+        
+    # Process Test (Val)
+    val_dir = os.path.join(output_dir, 'val')
+    print("Processing Test batch...")
+    test_file = os.path.join(input_dir, 'test_batch')
+    data = unpickle(test_file)
+    save_images(data, val_dir, label_names)
+    
+    print("Conversion complete!")
+    print(f"Data saved to {output_dir}")
+
+if __name__ == "__main__":
+    main()

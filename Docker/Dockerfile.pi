@@ -1,0 +1,31 @@
+# Dockerfile for Raspberry Pi (ARM64)
+FROM python:3.9-slim-bullseye
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libjpeg-dev \
+    zlib1g-dev \
+    libopenblas-dev \
+    liblapack-dev \
+    libopencv-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+# Note: On Raspberry Pi, installing torch might need specific wheels or index-url
+# We use standard pip here, assuming aarch64 wheels are available on PyPI (they are for newer versions)
+COPY Docker/requirements.txt .
+# Remove torch from requirements to install it separately with specific index if needed, 
+# but for now let's try standard install. 
+# HardCoReNAS requires torch>=1.6. We'll install a newer one compatible with Pi.
+RUN pip install --no-cache-dir torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application
+COPY . .
+
+# Default command
+CMD ["python3", "benchmark/evaluate.py"]

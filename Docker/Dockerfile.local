@@ -1,0 +1,35 @@
+# Use Python 3.9 slim image (x86_64)
+FROM python:3.9-slim-bullseye
+
+# Set working directory
+WORKDIR /workspace
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+# We install torch CPU version for smaller image size on local testing
+RUN pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Install other requirements
+# We copy requirements.txt if it exists, otherwise we install manually
+COPY Docker/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt || \
+    pip install --no-cache-dir onnx onnxruntime tqdm pyyaml numpy scipy pandas coloredlogs
+
+# Install additional dependencies for our pipeline
+RUN pip install --no-cache-dir tensorboardX cvxopt cvxpy
+
+# Copy the entire project
+COPY . /workspace
+
+# Set environment variables
+ENV PYTHONPATH=/workspace
+
+# Default command
+CMD ["/bin/bash"]

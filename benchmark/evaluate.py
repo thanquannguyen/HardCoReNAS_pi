@@ -64,7 +64,7 @@ def evaluate_accuracy(model_or_session, val_dir, is_onnx=False, batch_size=32):
     ])
     
     dataset = datasets.ImageFolder(val_dir, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     
     correct = 0
     total = 0
@@ -92,6 +92,13 @@ def evaluate_accuracy(model_or_session, val_dir, is_onnx=False, batch_size=32):
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted.cpu() == labels.cpu()).sum().item()
+            
+            if total > 0 and total % (32 * 5) == 0: # Print every 5 batches
+                print(f" Partial Acc: {100 * correct / total:.2f}%")
+            
+            if total <= 32: # Print predictions for the first batch
+                print(f" Predictions: {predicted.cpu().numpy()}")
+                print(f" Labels:      {labels.cpu().numpy()}")
             
     accuracy = 100 * correct / total
     return accuracy

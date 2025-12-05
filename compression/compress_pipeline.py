@@ -37,7 +37,7 @@ def run_compression(args):
     
     if args.checkpoint:
         print(f"Loading weights from {args.checkpoint}")
-        checkpoint = torch.load(args.checkpoint, map_location='cpu')
+        checkpoint = torch.load(args.checkpoint, map_location='cpu', weights_only=False)
         if 'state_dict' in checkpoint:
             state_dict = checkpoint['state_dict']
         else:
@@ -71,7 +71,16 @@ def run_compression(args):
         quantized_path = "model_quantized.onnx"
         
         quantize_onnx.export_onnx(model, input_shape, onnx_path)
-        quantize_onnx.quantize_model(onnx_path, quantized_path)
+        
+        # Use Static Quantization with Calibration
+        print("Preparing calibration data...")
+        val_dir = "data/cifar10_images/val"
+        if os.path.exists(val_dir):
+            reader = quantize_onnx.CIFAR10CalibrationDataReader(val_dir, count=300)
+            quantize_onnx.quantize_model(onnx_path, quantized_path, calibration_data_reader=reader)
+        else:
+            print(f"Warning: {val_dir} not found. Falling back to Dynamic Quantization (Not recommended for CNNs).")
+            quantize_onnx.quantize_model(onnx_path, quantized_path)
 
     print("Compression finished.")
 

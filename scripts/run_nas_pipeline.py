@@ -52,7 +52,7 @@ def main():
         f"--mobilenet_string=\"{mobilenet_string}\" "
         f"--num-classes 10 "
         f"--initial-checkpoint {pretrained_ckpt} "
-        f"--epochs 30 "
+        f"--epochs 100 "
         f"--batch-size 32 "
         f"--output {output_dir} "
         f"--validation-batch-size-multiplier 1 "
@@ -63,7 +63,18 @@ def main():
     if os.path.exists(pretrained_ckpt):
         run_command(train_cmd)
         # Update checkpoint path for compression to use the fine-tuned model
-        checkpoint = f"{output_dir}/model_best.pth.tar"
+        # Search recursively for model_best.pth.tar as train.py creates nested timestamped dirs
+        checkpoint = None
+        for root, dirs, files in os.walk(output_dir):
+            if "model_best.pth.tar" in files:
+                checkpoint = os.path.join(root, "model_best.pth.tar")
+                break
+        
+        if checkpoint is None:
+            print(f"Warning: model_best.pth.tar not found in {output_dir}. Using initial checkpoint.")
+            checkpoint = pretrained_ckpt
+        else:
+            print(f"Found fine-tuned checkpoint: {checkpoint}")
     else:
         print("Pretrained checkpoint not found. Skipping training.")
         checkpoint = pretrained_ckpt # Fallback

@@ -1,14 +1,11 @@
 # Dockerfile for Raspberry Pi (ARM64)
-FROM python:3.9-slim-bullseye
+FROM python:3.9-bullseye
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     libjpeg-dev \
     zlib1g-dev \
-    libopenblas-dev \
-    liblapack-dev \
-    libopencv-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -22,6 +19,7 @@ COPY Docker/requirements.txt .
 # but for now let's try standard install. 
 # HardCoReNAS requires torch>=1.6. We'll install a newer one compatible with Pi.
 RUN pip install --no-cache-dir torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir opencv-python-headless
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application

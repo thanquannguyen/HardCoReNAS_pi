@@ -37,18 +37,40 @@ def main():
     mobilenet_string = "[['ds_r1_k3_s1_e1_c16_nre'], ['ir_r1_k5_s2_e3_c24_nre', 'ir_r1_k5_s1_e3_c24_nre_se0.25'], ['ir_r1_k5_s2_e3_c40_nre', 'ir_r1_k5_s1_e6_c40_nre_se0.25'], ['ir_r1_k5_s2_e6_c80_se0.25', 'ir_r1_k5_s1_e6_c80_se0.25'], ['ir_r1_k5_s1_e6_c112_se0.25', 'ir_r1_k5_s1_e6_c112_se0.25'], ['ir_r1_k5_s2_e6_c192_se0.25', 'ir_r1_k5_s1_e6_c192_se0.25'], ['cn_r1_k1_s1_c960']]"
     
     # 3. Train (Fine-tune)
-    print("--- Step 3: Fine-tune (Simulated) ---")
-    # run_command(f"python train.py {dataset_path} --mobilenet_string=\"{mobilenet_string}\" ...")
+    print("--- Step 3: Fine-tune (Real Training) ---")
+    # We use the ImageNet checkpoint as a starting point (Transfer Learning)
+    pretrained_ckpt = "checkpoints/hardcorenas_a.pth"
+    output_dir = "outputs/fine_tuned"
     
+    # Command for fine-tuning on CIFAR-10
+    # We set epochs=5 for a quick demo. Increase to 50+ for high accuracy.
+    train_cmd = (
+        f"python train.py data/cifar10_images "
+        f"--mobilenet_string=\"{mobilenet_string}\" "
+        f"--num-classes 10 "
+        f"--initial-checkpoint {pretrained_ckpt} "
+        f"--epochs 100 "
+        f"--batch-size 32 "
+        f"--output {output_dir} "
+        f"--validation-batch-size-multiplier 1 "
+        f"--no-prefetcher" 
+    )
+    
+    if os.path.exists(pretrained_ckpt):
+        run_command(train_cmd)
+        # Update checkpoint path for compression to use the fine-tuned model
+        checkpoint = f"{output_dir}/model_best.pth.tar"
+    else:
+        print("Pretrained checkpoint not found. Skipping training.")
+        checkpoint = pretrained_ckpt # Fallback
+
     # 4. Compression Pipeline
     print("--- Step 4: Compression ---")
-    # Use downloaded HardCoRe-NAS A checkpoint for demo
-    checkpoint = "checkpoints/hardcorenas_a.pth" 
     if not os.path.exists(checkpoint):
-        print("No checkpoint found, skipping compression run. Run scripts/download_checkpoints.py first.")
+        print(f"Checkpoint {checkpoint} not found. Skipping compression.")
     else:
-        # Run compression pipeline
-        run_command(f"python compression/compress_pipeline.py --mobilenet_string=\"{mobilenet_string}\" --checkpoint={checkpoint} --prune --low_rank --quantize")
+        # Run compression pipeline with num_classes=10
+        run_command(f"python compression/compress_pipeline.py --mobilenet_string=\"{mobilenet_string}\" --checkpoint={checkpoint} --num_classes=10 --prune --low_rank --quantize")
 
 if __name__ == "__main__":
     main()

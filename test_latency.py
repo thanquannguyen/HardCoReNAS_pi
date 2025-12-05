@@ -41,13 +41,13 @@ for i in range(num_iter):
     # while expected_latency*1e3 > 12:
     random_one_hot(model)
     expected_latency = model.extract_expected_latency(target='onnx', batch_size=1,
-                                                      file_name='list_time_bottlenecks_all_open_vino.pkl',
+                                                      file_name='lut_cpu.pkl',
                                                       iterations=100)
     # print(expected_latency)
 
     model2, string_model = transform_model_to_mobilenet(model)
     model2.eval()
-    t = measure_time_openvino(model2)
+    t = measure_time_onnx(model2)
     print("Done: {}/{}. Expected latency: {:0.2f}[ms] | Measured latency: {:0.2f}[ms]"
           .format(i, num_iter, expected_latency * 1e3, t * 1e3))
     latency_table.append([expected_latency * 1e3, t * 1e3])

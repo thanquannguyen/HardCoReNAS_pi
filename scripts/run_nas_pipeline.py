@@ -53,6 +53,7 @@ def main():
         f"--batch-size 32 "
         f"--output {output_dir} "
         f"--validation-batch-size-multiplier 1 "
+        f"--workers 0 "
         f"--no-prefetcher" 
     )
     

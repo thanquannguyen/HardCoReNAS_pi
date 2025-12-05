@@ -67,10 +67,21 @@ def main():
     # Load meta
     meta_file = os.path.join(input_dir, 'batches.meta')
     if not os.path.exists(meta_file):
-        print("batches.meta not found.")
+        print("batches.meta not found. Retrying download...")
+        import shutil
+        shutil.rmtree(input_dir)
+        main() # Retry
         return
         
-    meta = unpickle(meta_file)
+    try:
+        meta = unpickle(meta_file)
+    except Exception as e:
+        print(f"Error unpickling meta file: {e}. Data might be corrupted (LFS pointer?). Deleting and retrying...")
+        import shutil
+        shutil.rmtree(input_dir)
+        main() # Retry
+        return
+
     label_names = meta[b'label_names']
     
     # Process Train
@@ -78,8 +89,15 @@ def main():
     print("Processing Train batches...")
     for i in range(1, 6):
         batch_file = os.path.join(input_dir, f'data_batch_{i}')
-        data = unpickle(batch_file)
-        save_images(data, train_dir, label_names)
+        try:
+            data = unpickle(batch_file)
+            save_images(data, train_dir, label_names)
+        except Exception as e:
+             print(f"Error processing batch {i}: {e}. Retrying...")
+             import shutil
+             shutil.rmtree(input_dir)
+             main()
+             return
         
     # Process Test (Val)
     val_dir = os.path.join(output_dir, 'val')

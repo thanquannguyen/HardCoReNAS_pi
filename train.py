@@ -870,7 +870,7 @@ def main():
                 write_header=best_metric is None)
             if not args.no_tensorboard and DistributedManager.is_master():
                 loaders = dict(train=loader_train, val=loader_eval)
-                update_tensorboard(epoch, train_metrics, eval_metrics, list_alphas, loaders, writer)
+                update_tensorboard(epoch, train_metrics, eval_metrics, None, list_alphas, loaders, writer)
 
             if saver is not None:
                 # save proper checkpoint with eval metric

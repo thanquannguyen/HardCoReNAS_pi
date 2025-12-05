@@ -17,6 +17,11 @@ parser.add_argument('--lut_measure_batch_size', type=int, default=1,
 
 args = parser.parse_args()
 
+import os
+if os.path.exists(args.lut_filename):
+    print(f"LUT file {args.lut_filename} already exists. Skipping measurement.")
+    exit(0)
+
 model = create_model(
     'mobilenasnet',
     num_classes=1000,

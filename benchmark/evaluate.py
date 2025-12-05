@@ -96,10 +96,6 @@ def evaluate_accuracy(model_or_session, val_dir, is_onnx=False, batch_size=32):
             if total > 0 and total % (32 * 5) == 0: # Print every 5 batches
                 print(f" Partial Acc: {100 * correct / total:.2f}%")
             
-            if total <= 32: # Print predictions for the first batch
-                print(f" Predictions: {predicted.cpu().numpy()}")
-                print(f" Labels:      {labels.cpu().numpy()}")
-            
     accuracy = 100 * correct / total
     return accuracy
 

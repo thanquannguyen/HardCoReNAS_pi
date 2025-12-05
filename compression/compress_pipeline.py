@@ -76,7 +76,7 @@ def run_compression(args):
         print("Preparing calibration data...")
         val_dir = "data/cifar10_images/val"
         if os.path.exists(val_dir):
-            reader = quantize_onnx.CIFAR10CalibrationDataReader(val_dir, count=300)
+            reader = quantize_onnx.CIFAR10CalibrationDataReader(val_dir, count=100)
             quantize_onnx.quantize_model(onnx_path, quantized_path, calibration_data_reader=reader)
         else:
             print(f"Warning: {val_dir} not found. Falling back to Dynamic Quantization (Not recommended for CNNs).")

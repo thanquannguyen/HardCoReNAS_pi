@@ -33,8 +33,36 @@ def main():
     output_dir = 'data/cifar10_images'
     
     if not os.path.exists(input_dir):
-        print(f"Input directory {input_dir} not found.")
-        return
+        print(f"Input directory {input_dir} not found. Downloading CIFAR-10...")
+        import urllib.request
+        import tarfile
+        
+        url = "https://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
+        filename = "cifar-10-python.tar.gz"
+        
+        # Download
+        try:
+            urllib.request.urlretrieve(url, filename)
+            print("Download complete. Extracting...")
+            
+            # Extract
+            with tarfile.open(filename, "r:gz") as tar:
+                tar.extractall("data")
+            
+            # Rename folder if necessary (tar extracts to cifar-10-batches-py)
+            extracted_dir = "data/cifar-10-batches-py"
+            if os.path.exists(extracted_dir):
+                if os.path.exists(input_dir):
+                    import shutil
+                    shutil.rmtree(input_dir)
+                os.rename(extracted_dir, input_dir)
+                
+            print("Extraction complete.")
+            os.remove(filename)
+            
+        except Exception as e:
+            print(f"Error downloading/extracting CIFAR-10: {e}")
+            return
 
     # Load meta
     meta_file = os.path.join(input_dir, 'batches.meta')

@@ -17,7 +17,10 @@ def main():
     # 1. Measure Latency LUT
     print("--- Step 1: Measure Latency LUT ---")
     # Assuming we run on CPU for now as proxy or if on Pi
-    run_command(f"python measure_latency_lut.py --target_device=cpu --lut_filename={lut_file}")
+    if os.path.exists(lut_file):
+        print(f"LUT file {lut_file} exists. Skipping Step 1.")
+    else:
+        run_command(f"python measure_latency_lut.py --target_device=cpu --lut_filename={lut_file}")
     
     # 2. Search (Using downloaded Supernet)
     print("--- Step 2: Search Architecture ---")

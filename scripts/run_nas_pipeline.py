@@ -52,7 +52,7 @@ def main():
         f"--mobilenet_string=\"{mobilenet_string}\" "
         f"--num-classes 10 "
         f"--initial-checkpoint {pretrained_ckpt} "
-        f"--epochs 100 "
+        f"--epochs 30 "
         f"--batch-size 32 "
         f"--output {output_dir} "
         f"--validation-batch-size-multiplier 1 "

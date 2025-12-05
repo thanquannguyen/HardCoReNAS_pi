@@ -15,7 +15,7 @@ from timm.models.layers.conv2d_same import Conv2dSame
 
 def load_state_dict(checkpoint_path, use_ema=False):
     if checkpoint_path and os.path.isfile(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         state_dict_key = 'state_dict'
         if isinstance(checkpoint, dict):
             if use_ema and 'state_dict_ema' in checkpoint:
@@ -82,7 +82,7 @@ def resume_checkpoint(model, checkpoint_path):
     other_state = {}
     resume_epoch = None
     if os.path.isfile(checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
+        checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
         if isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
             new_state_dict = OrderedDict()
             for k, v in checkpoint['state_dict'].items():

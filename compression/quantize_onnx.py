@@ -1,14 +1,16 @@
 import torch
 import onnx
 import onnxruntime
-from onnxruntime.quantization import quantize_dynamic, quantize_static, CalibrationDataReader, QuantType
+from onnxruntime.quantization import quantize_dynamic, quantize_static, CalibrationDataReader, QuantType, CalibrationMethod
 
 def export_onnx(model, input_shape, onnx_path):
     model.eval()
     dummy_input = torch.randn(*input_shape)
-    print(f"Exporting ONNX with input shape: {dummy_input.shape}")
+    device = next(model.parameters()).device
+    dummy_input = dummy_input.to(device)
+    print(f"Exporting ONNX with input shape: {dummy_input.shape} on device: {device}")
     torch.onnx.export(model, dummy_input, onnx_path, 
-                      opset_version=11, 
+                      opset_version=13, 
                       input_names=['input'], 
                       output_names=['output'],
                       dynamic_axes={'input': {0: 'batch_size'}, 'output': {0: 'batch_size'}})
@@ -22,7 +24,11 @@ def quantize_model(onnx_path, quantized_path, calibration_data_reader=None):
     """
     if calibration_data_reader:
         print("Performing Static Quantization...")
-        quantize_static(onnx_path, quantized_path, calibration_data_reader)
+        quantize_static(onnx_path, quantized_path, calibration_data_reader,
+                        weight_type=QuantType.QUInt8,
+                        activation_type=QuantType.QUInt8,
+                        calibrate_method=CalibrationMethod.Entropy,
+                        per_channel=False)
     else:
         print("Performing Dynamic Quantization...")
         quantize_dynamic(onnx_path, quantized_path, weight_type=QuantType.QUInt8)

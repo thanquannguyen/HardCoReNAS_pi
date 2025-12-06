@@ -119,14 +119,22 @@ def main(args):
             num_classes=args.num_classes,
             mobilenet_string=args.mobilenet_string
         )
-        checkpoint = torch.load(args.model_path, map_location='cpu')
+        checkpoint = torch.load(args.model_path, map_location='cpu', weights_only=False)
         # Load state dict logic...
         if 'state_dict' in checkpoint:
             state_dict = checkpoint['state_dict']
         else:
             state_dict = checkpoint
         new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-        model.load_state_dict(new_state_dict, strict=False)
+        
+        # Print sample weight from checkpoint
+        if 'classifier.weight' in new_state_dict:
+            print(f"Checkpoint classifier weight sample: {new_state_dict['classifier.weight'][0, :5]}")
+            
+        model.load_state_dict(new_state_dict, strict=True)
+        
+        # Print sample weight from model
+        print(f"Model classifier weight sample: {model.classifier.weight[0, :5]}")
         
         latency = measure_latency_pytorch(model)
         model_size = os.path.getsize(args.model_path) / 1024 / 1024 # MB

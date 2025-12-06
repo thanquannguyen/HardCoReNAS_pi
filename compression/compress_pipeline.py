@@ -32,7 +32,7 @@ def get_train_loader(data_dir, batch_size=32):
     dataset = datasets.ImageFolder(train_dir, transform=transform)
     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
 
-def fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device='cpu'):
+def fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device='cpu', max_batches=None):
     """
     Fine-tune the model (Healing) with Knowledge Distillation.
     """
@@ -51,6 +51,10 @@ def fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device='cp
     for epoch in range(epochs):
         running_loss = 0.0
         for i, (inputs, labels) in enumerate(train_loader):
+            if max_batches and i >= max_batches:
+                print(f"  Reached max_batches ({max_batches}). Stopping epoch early.")
+                break
+                
             inputs, labels = inputs.to(device), labels.to(device)
             
             optimizer.zero_grad()
@@ -77,8 +81,8 @@ def fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device='cp
             optimizer.step()
             
             running_loss += loss.item()
-            if i % 50 == 0:
-                print(f"  Epoch {epoch+1}, Batch {i}, Loss: {running_loss/50:.4f}")
+            if i % 20 == 0: # Print more frequently for short runs
+                print(f"  Epoch {epoch+1}, Batch {i}, Loss: {running_loss/20:.4f}")
                 running_loss = 0.0
     
     model.eval()
@@ -147,7 +151,7 @@ def run_compression(args):
     teacher_model.eval()
     
     # Prepare Data
-    train_loader = get_train_loader('data/cifar10_images', batch_size=128)
+    train_loader = get_train_loader('data/cifar10_images', batch_size=32)
     
     model.eval()
     
@@ -155,8 +159,8 @@ def run_compression(args):
     if args.prune:
         model = apply_pruning(model, amount=args.prune_amount)
         # Fine-tune to heal
-        if train_loader:
-            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device)
+        if train_loader and not args.compressed_checkpoint:
+            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device, max_batches=100)
         # Make permanent
         model = make_pruning_permanent(model)
         
@@ -164,12 +168,30 @@ def run_compression(args):
     if args.low_rank:
         model = low_rank.apply_low_rank(model, rank_ratio=args.rank_ratio)
         # Fine-tune to heal
-        if train_loader:
-            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device)
+        if train_loader and not args.compressed_checkpoint:
+            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device, max_batches=100)
+        
+    # Load compressed weights if provided (Late Loading)
+    if args.compressed_checkpoint:
+        print(f"Loading compressed weights from {args.compressed_checkpoint}")
+        checkpoint = torch.load(args.compressed_checkpoint, map_location='cpu', weights_only=False)
+        if 'state_dict' in checkpoint:
+            state_dict = checkpoint['state_dict']
+        else:
+            state_dict = checkpoint
+        
+        # Handle potential key mismatches
+        new_state_dict = {}
+        for k, v in state_dict.items():
+            name = k.replace('module.', '')
+            new_state_dict[name] = v
+        model.load_state_dict(new_state_dict, strict=True)
+        print("Successfully loaded compressed weights.")
         
     # Save intermediate pytorch model
-    torch.save(model.state_dict(), "compressed_model.pth")
-    print("Saved compressed PyTorch model to compressed_model.pth")
+    if not args.compressed_checkpoint:
+        torch.save(model.state_dict(), "compressed_model.pth")
+        print("Saved compressed PyTorch model to compressed_model.pth")
 
     # 4. Quantization (via ONNX)
     if args.quantize:
@@ -188,7 +210,8 @@ def run_compression(args):
             quantize_onnx.quantize_static(onnx_path, quantized_path, reader,
                             weight_type=quantize_onnx.QuantType.QInt8,
                             activation_type=quantize_onnx.QuantType.QUInt8,
-                            calibrate_method=quantize_onnx.CalibrationMethod.Entropy)
+                            calibrate_method=quantize_onnx.CalibrationMethod.Entropy,
+                            per_channel=True)
         else:
             print(f"Warning: {val_dir} not found. Falling back to Dynamic Quantization (Not recommended for CNNs).")
             quantize_onnx.quantize_model(onnx_path, quantized_path)
@@ -208,6 +231,7 @@ if __name__ == "__main__":
     parser.add_argument('--rank_ratio', type=float, default=0.5, help='Rank ratio for SVD')
     
     parser.add_argument('--quantize', action='store_true', help='Apply quantization')
+    parser.add_argument('--compressed_checkpoint', type=str, default='', help='Path to already compressed checkpoint (for quantization only)')
     
     args = parser.parse_args()
     

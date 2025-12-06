@@ -42,7 +42,7 @@ def main():
     print("Loading model...")
     
     # Check for ONNX model first (Deployment scenario)
-    onnx_path = "model_quantized.onnx"
+    onnx_path = "model_quantizedasdf.onnx"
     if os.path.exists(onnx_path):
         print(f"Loading ONNX model from {onnx_path}")
         import onnxruntime as ort

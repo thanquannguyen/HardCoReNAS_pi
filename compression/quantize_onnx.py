@@ -43,15 +43,18 @@ class CIFAR10CalibrationDataReader(CalibrationDataReader):
         self.count = count
         self.image_paths = []
         
-        # Collect image paths
+        # Collect ALL image paths first to ensure random sampling across classes
         for root, _, files in os.walk(data_dir):
             for file in files:
                 if file.lower().endswith(('.png', '.jpg', '.jpeg')):
                     self.image_paths.append(os.path.join(root, file))
-                    if len(self.image_paths) >= self.count:
-                        break
-            if len(self.image_paths) >= self.count:
-                break
+        
+        import random
+        random.shuffle(self.image_paths)
+        
+        # Limit to count
+        if len(self.image_paths) > self.count:
+            self.image_paths = self.image_paths[:self.count]
         
         self.enum_data = iter(self.image_paths)
         

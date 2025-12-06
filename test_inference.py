@@ -40,21 +40,38 @@ def main():
     
     # 1. Load Model
     print("Loading model...")
-    model = create_model('mobilenasnet', num_classes=1000, mobilenet_string=mobilenet_string)
     
-    # Load weights if available (using the quantized/compressed one if possible, but here we load the checkpoint)
-    checkpoint_path = "checkpoints/hardcorenas_a.pth"
-    if os.path.exists(checkpoint_path):
-        print(f"Loading weights from {checkpoint_path}")
-        checkpoint = torch.load(checkpoint_path, map_location='cpu')
-        if 'state_dict' in checkpoint:
-            state_dict = checkpoint['state_dict']
+    # Check for ONNX model first (Deployment scenario)
+    onnx_path = "model_quantized.onnx"
+    if os.path.exists(onnx_path):
+        print(f"Loading ONNX model from {onnx_path}")
+        import onnxruntime as ort
+        session = ort.InferenceSession(onnx_path)
+        is_onnx = True
+    else:
+        # Fallback to PyTorch model
+        is_onnx = False
+        model = create_model('mobilenasnet', num_classes=10, mobilenet_string=mobilenet_string) # num_classes=10 for CIFAR-10
+        
+        # Load weights (prefer compressed_model.pth, then fine_tuned, then initial)
+        if os.path.exists("compressed_model.pth"):
+            checkpoint_path = "compressed_model.pth"
+        elif os.path.exists("outputs/fine_tuned/model_best.pth.tar"):
+            checkpoint_path = "outputs/fine_tuned/model_best.pth.tar"
         else:
-            state_dict = checkpoint
-        new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
-        model.load_state_dict(new_state_dict, strict=False)
-    
-    model.eval()
+            checkpoint_path = "checkpoints/hardcorenas_a.pth"
+            
+        if os.path.exists(checkpoint_path):
+            print(f"Loading weights from {checkpoint_path}")
+            checkpoint = torch.load(checkpoint_path, map_location='cpu')
+            if 'state_dict' in checkpoint:
+                state_dict = checkpoint['state_dict']
+            else:
+                state_dict = checkpoint
+            new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+            model.load_state_dict(new_state_dict, strict=False)
+        
+        model.eval()
     
     # 2. Select Image
     if args.image_path:
@@ -93,9 +110,18 @@ def main():
     # 3. Run Inference
     original_img, input_tensor = load_image(image_path)
     
-    with torch.no_grad():
-        output = model(input_tensor)
-        probabilities = F.softmax(output, dim=1)
+    if is_onnx:
+        input_name = session.get_inputs()[0].name
+        # ONNX Runtime expects numpy
+        inputs = input_tensor.numpy()
+        outputs = session.run(None, {input_name: inputs})
+        # outputs is a list, take the first element
+        output_tensor = torch.from_numpy(outputs[0])
+        probabilities = F.softmax(output_tensor, dim=1)
+    else:
+        with torch.no_grad():
+            output = model(input_tensor)
+            probabilities = F.softmax(output, dim=1)
         
     # Get Top-1 Prediction
     # Note: The model was initialized with num_classes=1000 (ImageNet default) for the dummy checkpoint

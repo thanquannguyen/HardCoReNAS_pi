@@ -1,8 +1,14 @@
-import sys
-import os
-import argparse
 import torch
 import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
+import copy
+import argparse
+import sys
+import os
+
 # Add project root to path to import timm and other modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,6 +18,72 @@ import low_rank
 import quantize_onnx
 import torch.nn.utils.prune as prune
 
+def get_train_loader(data_dir, batch_size=32):
+    transform = transforms.Compose([
+        transforms.RandomResizedCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ])
+    train_dir = os.path.join(data_dir, 'train')
+    if not os.path.exists(train_dir):
+        print(f"Warning: Train data not found at {train_dir}")
+        return None
+    dataset = datasets.ImageFolder(train_dir, transform=transform)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+
+def fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device='cpu'):
+    """
+    Fine-tune the model (Healing) with Knowledge Distillation.
+    """
+    print(f"Fine-tuning model for {epochs} epochs (LR={lr})...")
+    model.to(device)
+    model.train()
+    
+    if teacher_model:
+        teacher_model.to(device)
+        teacher_model.eval()
+        print("Using Knowledge Distillation.")
+    
+    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=1e-4)
+    criterion = nn.CrossEntropyLoss()
+    
+    for epoch in range(epochs):
+        running_loss = 0.0
+        for i, (inputs, labels) in enumerate(train_loader):
+            inputs, labels = inputs.to(device), labels.to(device)
+            
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            
+            loss = criterion(outputs, labels)
+            
+            # KD Loss
+            if teacher_model:
+                with torch.no_grad():
+                    teacher_outputs = teacher_model(inputs)
+                
+                # SoftTarget Loss (KLDiv)
+                T = 4.0
+                alpha = 0.9
+                soft_loss = nn.KLDivLoss(reduction='batchmean')(
+                    F.log_softmax(outputs/T, dim=1),
+                    F.softmax(teacher_outputs/T, dim=1)
+                ) * (T * T)
+                
+                loss = loss * (1. - alpha) + soft_loss * alpha
+            
+            loss.backward()
+            optimizer.step()
+            
+            running_loss += loss.item()
+            if i % 50 == 0:
+                print(f"  Epoch {epoch+1}, Batch {i}, Loss: {running_loss/50:.4f}")
+                running_loss = 0.0
+    
+    model.eval()
+    return model
+
 def apply_pruning(model, amount=0.2):
     """
     Apply L1 Unstructured Pruning to all Conv2d layers.
@@ -20,11 +92,31 @@ def apply_pruning(model, amount=0.2):
     for name, module in model.named_modules():
         if isinstance(module, nn.Conv2d):
             prune.l1_unstructured(module, name='weight', amount=amount)
-            prune.remove(module, 'weight') # Make pruning permanent
+            # Do NOT remove pruning hooks yet if we want to fine-tune with masks?
+            # Actually, for simple unstructured pruning, we can make it permanent 
+            # but usually we train with the mask. 
+            # For simplicity here, we make it permanent immediately so we don't deal with re-parametrization issues during save/load.
+            # But ideally: Prune -> Train (Masked) -> Remove.
+            # Here: Prune -> Remove -> Train (Weights are 0, but gradients might update them? No, remove makes them 0 hard).
+            # Wait, prune.remove makes the pruning permanent (applies mask to weight). 
+            # If we train after prune.remove, the 0 weights CAN become non-zero again if gradient is non-zero.
+            # So we should NOT call prune.remove() before fine-tuning if we want to keep sparsity.
+            # But standard PyTorch pruning handles this by registering a hook.
+            pass 
+    return model
+
+def make_pruning_permanent(model):
+    print("Making pruning permanent...")
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Conv2d):
+            if prune.is_pruned(module):
+                prune.remove(module, 'weight')
     return model
 
 def run_compression(args):
-    print("Starting compression pipeline...")
+    print("Starting ADVANCED compression pipeline...")
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f"Using device: {device}")
     
     # 1. Load Model
     print(f"Creating model with string: {args.mobilenet_string}")
@@ -50,15 +142,30 @@ def run_compression(args):
             new_state_dict[name] = v
         model.load_state_dict(new_state_dict, strict=False)
     
+    # Create Teacher Model for KD
+    teacher_model = copy.deepcopy(model)
+    teacher_model.eval()
+    
+    # Prepare Data
+    train_loader = get_train_loader('data/cifar10_images', batch_size=128)
+    
     model.eval()
     
     # 2. Pruning
     if args.prune:
         model = apply_pruning(model, amount=args.prune_amount)
+        # Fine-tune to heal
+        if train_loader:
+            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device)
+        # Make permanent
+        model = make_pruning_permanent(model)
         
     # 3. Low-Rank Factorization
     if args.low_rank:
         model = low_rank.apply_low_rank(model, rank_ratio=args.rank_ratio)
+        # Fine-tune to heal
+        if train_loader:
+            model = fine_tune(model, teacher_model, train_loader, epochs=1, lr=0.001, device=device)
         
     # Save intermediate pytorch model
     torch.save(model.state_dict(), "compressed_model.pth")
@@ -77,7 +184,11 @@ def run_compression(args):
         val_dir = "data/cifar10_images/val"
         if os.path.exists(val_dir):
             reader = quantize_onnx.CIFAR10CalibrationDataReader(val_dir, count=100)
-            quantize_onnx.quantize_model(onnx_path, quantized_path, calibration_data_reader=reader)
+            print("Performing Static Quantization (Entropy, Per-Channel)...")
+            quantize_onnx.quantize_static(onnx_path, quantized_path, reader,
+                            weight_type=quantize_onnx.QuantType.QInt8,
+                            activation_type=quantize_onnx.QuantType.QUInt8,
+                            calibrate_method=quantize_onnx.CalibrationMethod.Entropy)
         else:
             print(f"Warning: {val_dir} not found. Falling back to Dynamic Quantization (Not recommended for CNNs).")
             quantize_onnx.quantize_model(onnx_path, quantized_path)

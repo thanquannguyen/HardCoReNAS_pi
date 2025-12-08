@@ -1,0 +1,22 @@
+# Exclude large directories
+data/
+outputs/
+.git/
+.vscode/
+__pycache__/
+
+# Exclude large files
+*.tar
+hardcorenas-pi.tar
+
+# Keep only necessary model files
+# (Note: Dockerignore excludes match patterns, so excluding *.pth might block compressed_model.pth unless we are careful. 
+# Better to exclude specific heavy extensions or folders)
+
+# Exclude training checkpoints
+*.pth.tar
+*.ckpt
+
+# Exclude system files
+.DS_Store
+Thumbs.db

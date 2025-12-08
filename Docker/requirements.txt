@@ -6,7 +6,7 @@ tqdm
 tensorboard==1.14.0
 imageio
 numpy
-opencv-python
+# opencv-python handled by Dockerfile (headless)
 pybind11
 tensorboardX
 onnx
@@ -16,3 +16,6 @@ scipy
 cvxopt
 cvxpy
 onnxruntime
+timm
+matplotlib
+Pillow

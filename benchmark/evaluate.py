@@ -8,7 +8,7 @@ import os
 import sys
 
 # Add project root to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from timm.models import create_model
 from timm.models.mobilenasnet import *
 import torchvision.transforms as transforms
